@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "linux_parser.h"
+#include "format.h"
 
 using std::stof;
 using std::string;
@@ -85,6 +86,7 @@ float LinuxParser::MemoryUtilization()
       }
     }
   }
+  // This returns the total memory used (including buffers and cache)
   return ((memTotal - memFree) / memTotal); 
 }
 
@@ -95,22 +97,17 @@ long LinuxParser::UpTime() {
   if(stream.is_open()) {
     std::getline(stream, line);
     std::istringstream linestream(line);
-    linestream >> value;
+    if(linestream >> value) {
+      return strtol(value.c_str(), NULL, 0); 
+    }
   }
-  return strtol(value.c_str(), NULL, 0);   
+  return 0;   
 }
 
 // TODO: Read and return the number of jiffies for the system
-long LinuxParser::Jiffies() { 
-  vector<string> cpuJiffies = CpuUtilization();
-  return (strtol(cpuJiffies[kUser_].c_str(), NULL, 0) + 
-        strtol(cpuJiffies[kNice_].c_str(), NULL, 0) + 
-        strtol(cpuJiffies[kSystem_].c_str(), NULL, 0) + 
-        strtol(cpuJiffies[kIdle_].c_str(), NULL, 0) + 
-        strtol(cpuJiffies[kIOwait_].c_str(), NULL, 0) + 
-        strtol(cpuJiffies[kIRQ_].c_str(), NULL, 0) + 
-        strtol(cpuJiffies[kSoftIRQ_].c_str(), NULL, 0) + 
-        strtol(cpuJiffies[kSteal_].c_str(), NULL, 0)); 
+long LinuxParser::Jiffies() {
+  // Total jiffies can be defined as the uptime secs * the system ticks per sec
+  return UpTime() * sysconf(_SC_CLK_TCK);
 }
 
 // TODO: Read and return the number of active jiffies for a PID
@@ -150,6 +147,7 @@ long LinuxParser::ActiveJiffies(int pid) {
 // TODO: Read and return the number of active jiffies for the system
 long LinuxParser::ActiveJiffies() { 
   vector<string> cpuJiffies = CpuUtilization();
+  // Per online documentation, guest jiffies are already inside the user and nice values
   return (strtol(cpuJiffies[kUser_].c_str(), NULL, 0) + 
         strtol(cpuJiffies[kNice_].c_str(), NULL, 0) + 
         strtol(cpuJiffies[kSystem_].c_str(), NULL, 0) + 
@@ -219,8 +217,10 @@ string LinuxParser::Command(int pid) {
   std::ifstream stream(kProcDirectory + to_string(pid) + kCmdlineFilename);
   if(stream.is_open()) {
     std::getline(stream, cmd);
+    return cmd;
   }
-  return cmd;
+  // Added a blank return value incase the cmd isn't found. Probably not useful.
+  return " ";
 }
 
 // TODO: Read and return the memory used by a process
@@ -233,11 +233,13 @@ string LinuxParser::Ram(int pid) {
     std::istringstream linestream(line);
     while(linestream >> name >> value) {
       if(name == "VmSize:") {
-        return to_string(std::stoi(value) / 1000);
+        // Convert to MB -> 1024 instead of 1000.... silly mistake
+        // made the format::pad more general to display the ram better, because ncurses display isn't great
+        return Format::pad(to_string(std::stoi(value) / 1024), 6, ' ');
       }
     }
   }
-  return "N/A"; 
+  return Format::pad(string("N/A"), 4, ' '); 
 }
 
 // TODO: Read and return the user ID associated with a process
@@ -255,7 +257,7 @@ string LinuxParser::Uid(int pid) {
       }
     }
   }
-  return "-1"; 
+  return " "; 
 }
 
 // TODO: Read and return the user associated with a process
@@ -275,20 +277,22 @@ string LinuxParser::User(int pid) {
       return name;
     }
   }
-  return "N/A"; 
+  return Format::pad(string("N/A"), 4, ' '); 
 }
 
 // TODO: Read and return the uptime of a process
 // REMOVE: [[maybe_unused]] once you define the function
-long LinuxParser::UpTime(int pid) { 
+long LinuxParser::UpTime(int pid) {
+  return (UpTime() - StartTime(pid));
+}
+
+long LinuxParser::StartTime(int pid) {
   string line, starttime;
   std::ifstream stream(kProcDirectory + to_string(pid) + kStatFilename);
   if(stream.is_open()) {
-    std::getline(stream, line);
-    std::istringstream linestream(line);
     for(int i=0; i<22; i++) {
-      linestream >> starttime;
-    }
+      stream >> starttime;
+    }    
   }
-  return strtol(starttime.c_str(), NULL, 0); 
+  return strtol(starttime.c_str(), NULL, 0) / sysconf(_SC_CLK_TCK);
 }

@@ -12,16 +12,18 @@ using std::to_string;
 using std::vector;
 
 // TODO: Return this process's ID
-int Process::Pid() { return pid_; }
+int Process::Pid() const { return pid_; }
 
 // TODO: Return this process's CPU utilization
-float Process::CpuUtilization() { 
-    long totalTime = LinuxParser::ActiveJiffies(pid_);
-    long starttime = UpTime();
-    long uptime = LinuxParser::Jiffies();
-    float seconds = ((float)uptime - (float)starttime) / _SC_CLK_TCK;
-    cpuU_ = (100 * (((float)totalTime / _SC_CLK_TCK) / seconds));
-    return cpuU_; 
+float Process::CpuUtilization() const { return cpuU_; }
+
+void Process::CpuUtilization(long pidJiffies) { 
+    long sysJiffies = LinuxParser::Jiffies();
+    long delta_pid = pidJiffies - prev_pidJiffies_;
+    long delta_sys = sysJiffies - prev_sysJiffies_;
+    cpuU_ = static_cast<float>(delta_pid) / delta_sys;
+    prev_pidJiffies_ = pidJiffies;
+    prev_sysJiffies_ = sysJiffies;
 }
 
 // TODO: Return the command that generated this process
@@ -39,10 +41,9 @@ long int Process::UpTime() { return LinuxParser::UpTime(pid_); }
 // TODO: Overload the "less than" comparison operator for Process objects
 // REMOVE: [[maybe_unused]] once you define the function
 bool Process::operator<(Process const& a) const { 
-    if(cpuU_ < a.cpuU_) {
-        return true;
-    } 
-    else {
-        return false;
-    }
+    return CpuUtilization() < a.CpuUtilization();
+}
+
+bool Process::operator>(Process const& a) const {
+    return CpuUtilization() > a.CpuUtilization();
 }

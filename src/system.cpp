@@ -23,7 +23,7 @@ vector<Process>& System::Processes() {
 
     // Use set because to make sure that we only add new pids
     set<int> pid_set;
-    for(Process &proc: processes_) {
+    for(Process const& proc : processes_) {
         pid_set.insert(proc.Pid());
     }
     for(int pid : pidList) {
@@ -33,10 +33,10 @@ vector<Process>& System::Processes() {
     }
 
     for(Process &proc : processes_) {
-        proc.CpuUtilization();
+        proc.CpuUtilization(LinuxParser::ActiveJiffies(proc.Pid()));
     }
 
-    std::sort(processes_.begin(), processes_.end(), [](auto a, auto b) { return a < b;});
+    std::sort(processes_.begin(), processes_.end(), std::greater<Process>());
 
     return processes_; 
 }
